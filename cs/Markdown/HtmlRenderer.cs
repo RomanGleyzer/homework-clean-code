@@ -4,7 +4,7 @@ namespace Markdown;
 
 public class HtmlRenderer
 {
-    public string Render(IReadOnlyList<IBlock> blocks)
+    public string Render(IReadOnlyList<Block> blocks)
     {
         // TODO: реализовать метод
         throw new NotImplementedException();
