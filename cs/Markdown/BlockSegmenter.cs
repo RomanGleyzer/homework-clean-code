@@ -6,7 +6,7 @@ public class BlockSegmenter
     {
         var paragraphs = SplitToParagraphs(text);
         var blocks = new List<Block>();
-       
+
         foreach (var paragraph in paragraphs)
         {
             var blockType = IdentifyBlockType(paragraph);

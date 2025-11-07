@@ -1,6 +1,4 @@
-﻿using Markdown.Interfaces;
-
-namespace Markdown;
+﻿namespace Markdown;
 
 public class HtmlRenderer
 {

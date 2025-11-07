@@ -1,6 +1,4 @@
-﻿using Markdown.Interfaces;
-
-namespace Markdown;
+﻿namespace Markdown;
 
 public class Block(string rawText, BlockType type)
 {
@@ -8,7 +6,7 @@ public class Block(string rawText, BlockType type)
 
     public BlockType Type { get; } = type;
 
-    public IReadOnlyList<INode> Inlines { get; set; } = [];
+    public IReadOnlyList<Node> Inlines { get; set; } = [];
 }
 
 public enum BlockType
