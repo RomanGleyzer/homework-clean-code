@@ -1,4 +1,4 @@
-﻿namespace Markdown.Nodes;
+﻿namespace Markdown.Interfaces;
 
 public interface INode
 {
