@@ -1,17 +1,25 @@
-﻿using FluentAssertions;
-using Markdown;
+﻿using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using FluentAssertions;
+using NUnit.Framework;
 
-namespace MarkdownTests;
+namespace Markdown.Tests;
 
 [TestFixture]
-public class InlineParserTests
+public class InlineParserTest
 {
     private InlineParser _parser = null!;
+    private BlockSegmenter _segmenter = null!;
 
     [SetUp]
-    public void SetUp() => _parser = new InlineParser();
+    public void SetUp()
+    {
+        _parser = new InlineParser();
+        _segmenter = new BlockSegmenter();
+    }
 
-    private static void ShouldBe(IReadOnlyList<Node> nodes, params (NodeType type, string text)[] expected)
+    private static void ShouldBeInlines(IReadOnlyList<Node> nodes, params (NodeType type, string text)[] expected)
     {
         nodes.Count.Should().Be(expected.Length, "кол-во узлов должно совпадать");
         for (int i = 0; i < expected.Length; i++)
@@ -21,195 +29,243 @@ public class InlineParserTests
         }
     }
 
-    [Test]
-    public void PlainText_NoMarkup()
+    private IReadOnlyList<Block> RunPipeline(string text)
     {
-        var nodes = _parser.Parse("просто текст");
-        ShouldBe(nodes, (NodeType.Text, "просто текст"));
+        var blocks = _segmenter.Segment(text);
+        foreach (var block in blocks)
+            block.Inlines = _parser.Parse(block.RawText).ToList();
+        return blocks;
+    }
+
+    private static string ToDebugString(IReadOnlyList<Block> blocks)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Blocks [");
+        foreach (var b in blocks)
+        {
+            sb.AppendLine("  Block {");
+            sb.AppendLine($"    RawText: \"{b.RawText}\",");
+            sb.AppendLine("    Inlines: [");
+            for (int i = 0; i < b.Inlines.Count; i++)
+            {
+                var n = b.Inlines[i];
+                var type = n.Type switch
+                {
+                    NodeType.Text => "Text",
+                    NodeType.Em => "Em",
+                    NodeType.Strong => "Strong",
+                    _ => n.Type.ToString()
+                };
+                sb.AppendLine($"      {type}(\"{n.Text}\"){(i < b.Inlines.Count - 1 ? "," : "")}");
+            }
+            sb.AppendLine("    ]");
+            sb.AppendLine("  }");
+        }
+        sb.Append("]");
+        return sb.ToString();
+    }
+
+    private static void ShouldBeBlocks(IReadOnlyList<Block> blocks, string expected)
+    {
+        var actual = ToDebugString(blocks);
+        actual.Should().Be(expected);
     }
 
     [Test]
-    public void Em_Simple_InBetween()
+    public void Em_Simple_FromSpec()
     {
-        var nodes = _parser.Parse("a _x_ b");
-        ShouldBe(nodes,
-            (NodeType.Text, "a "),
-            (NodeType.Em, "x"),
-            (NodeType.Text, " b"));
+        var nodes = _parser.Parse("Текст, _окруженный с двух сторон_ одинарными символами подчерка,");
+        ShouldBeInlines(nodes,
+            (NodeType.Text, "Текст, "),
+            (NodeType.Em, "окруженный с двух сторон"),
+            (NodeType.Text, " одинарными символами подчерка,"));
     }
 
     [Test]
-    public void Em_PartOfWord_Begin_Middle_End()
+    public void Em_WholeSentence_FromSpec()
     {
-        var nodes = _parser.Parse("нач_ало сер_еди_на кон_це");
-        ShouldBe(nodes,
-            (NodeType.Text, "нач"),
-            (NodeType.Em, "ало"),
-            (NodeType.Text, " сер"),
+        var nodes = _parser.Parse("Текст, <em>окруженный с двух сторон</em> одинарными символами подчерка, должен помещаться в HTML-тег <em>.");
+        ShouldBeInlines(nodes, (NodeType.Text, "Текст, <em>окруженный с двух сторон</em> одинарными символами подчерка, должен помещаться в HTML-тег <em>."));
+    }
+
+    [Test]
+    public void Em_PartOfWord_Start_Middle_End_FromSpec()
+    {
+        var nodes = _parser.Parse("Однако выделять часть слова они могут: и в _нач_але, и в сер_еди_не, и в кон_це.");
+        ShouldBeInlines(nodes,
+            (NodeType.Text, "Однако выделять часть слова они могут: и в "),
+            (NodeType.Em, "нач"),
+            (NodeType.Text, "але, и в сер"),
             (NodeType.Em, "еди"),
-            (NodeType.Text, "на кон"),
-            (NodeType.Em, "це"));
-    }
-
-    [Test]
-    public void Em_Unpaired_Underscore_ShouldStayText()
-    {
-        var nodes = _parser.Parse("_Непарные символы");
-        ShouldBe(nodes, (NodeType.Text, "_Непарные символы"));
-    }
-
-    [Test]
-    public void Em_OpeningFollowedBySpace_NotOpening()
-    {
-        var nodes = _parser.Parse("эти_ подчерки_");
-        ShouldBe(nodes, (NodeType.Text, "эти_ подчерки_"));
-    }
-
-    [Test]
-    public void Em_ClosingPrecededBySpace_NotClosing()
-    {
-        var nodes = _parser.Parse("эти _подчерки");
-        ShouldBe(nodes, (NodeType.Text, "эти _подчерки"));
-    }
-
-    [Test]
-    public void Em_AcrossWords_NotWorking()
-    {
-        var nodes = _parser.Parse("в ра_зных сл_овах не работает");
-        ShouldBe(nodes, (NodeType.Text, "в ра_зных сл_овах не работает"));
-    }
-
-    [Test]
-    public void Em_InsideDigits_NotMarkup()
-    {
-        var nodes = _parser.Parse("цифры_12_3");
-        ShouldBe(nodes, (NodeType.Text, "цифры_12_3"));
-    }
-
-    [Test]
-    public void Em_EmptyBetweenDelimiters_FourUnderscores_StayText()
-    {
-        var nodes = _parser.Parse("____");
-        ShouldBe(nodes, (NodeType.Text, "____"));
-    }
-
-    [Test]
-    public void Strong_Simple()
-    {
-        var nodes = _parser.Parse("a __x__ b");
-        ShouldBe(nodes,
-            (NodeType.Text, "a "),
-            (NodeType.Strong, "x"),
-            (NodeType.Text, " b"));
-    }
-
-    [Test]
-    public void Strong_EmptyBetweenDelimiters_ShouldStayText()
-    {
-        var nodes = _parser.Parse("____");
-        ShouldBe(nodes, (NodeType.Text, "____"));
-    }
-
-    [Test]
-    public void Em_Inside_Strong_Works()
-    {
-        var nodes = _parser.Parse("__с _разными_ символами__");
-        ShouldBe(nodes,
-            (NodeType.Strong, "с "),
-            (NodeType.Em, "разными"),
-            (NodeType.Strong, " символами"));
-    }
-
-    [Test]
-    public void Strong_Inside_Em_NotWorking()
-    {
-        var nodes = _parser.Parse("_a __b__ c_");
-        ShouldBe(nodes,
-            (NodeType.Em, "a __b__ c"));
-    }
-
-    [Test]
-    public void Crossing_Em_And_Strong_NoMarkup()
-    {
-        var nodes = _parser.Parse("__a_b__");
-        ShouldBe(nodes, (NodeType.Text, "__a_b__"));
-    }
-
-    [Test]
-    public void Crossing_Em_And_Strong_OtherPattern_NoMarkup()
-    {
-        var nodes = _parser.Parse("_a__b_");
-        ShouldBe(nodes, (NodeType.Text, "_a__b_"));
-    }
-
-    [Test]
-    public void Escape_Underscore_ShouldStayLiteral()
-    {
-        var nodes = _parser.Parse(@"\_это\_ не курсив");
-        ShouldBe(nodes, (NodeType.Text, "_это_ не курсив"));
-    }
-
-    [Test]
-    public void Escape_Backslash_DoubleSlash_To_SingleLiteral()
-    {
-        var nodes = _parser.Parse(@"сим\\вол");
-        ShouldBe(nodes, (NodeType.Text, @"сим\вол"));
-    }
-
-    [Test]
-    public void Escape_Char_Alone_At_End_ShouldStay()
-    {
-        var nodes = _parser.Parse(@"abc\");
-        ShouldBe(nodes, (NodeType.Text, @"abc\"));
-    }
-
-    [Test]
-    public void Escape_Backslash_Then_Em_ShouldWork()
-    {
-        var nodes = _parser.Parse(@"\\_x_");
-        ShouldBe(nodes,
-            (NodeType.Text, @"\"),
-            (NodeType.Em, "x"));
-    }
-
-    [Test]
-    public void Escape_Hash_ShouldRestoreHash()
-    {
-        var nodes = _parser.Parse(@"Hello \# world");
-        ShouldBe(nodes, (NodeType.Text, "Hello # world"));
-    }
-
-    [Test]
-    public void Mixed_Text_Em_Strong_With_Escapes()
-    {
-        var nodes = _parser.Parse(@"Текст __с \__экранами__ и _кучей\_символов_.");
-
-        ShouldBe(nodes,
-            (NodeType.Text, "Текст "),
-            (NodeType.Strong, "с __экранами"),
-            (NodeType.Text, " и "),
-            (NodeType.Em, "кучей_символов"),
+            (NodeType.Text, "не, и в кон"),
+            (NodeType.Em, "це"),
             (NodeType.Text, "."));
     }
 
     [Test]
-    public void Multiple_Text_Nodes_ShouldBeCombined()
+    public void Strong_Simple_FromSpec()
     {
-        var nodes = _parser.Parse("a _b_ c");
-        nodes.Count.Should().Be(3);
-        ShouldBe(nodes,
-            (NodeType.Text, "a "),
-            (NodeType.Em, "b"),
-            (NodeType.Text, " c"));
+        var nodes = _parser.Parse("__Выделенный двумя символами текст__ должен становиться полужирным с помощью тега <strong>.");
+        ShouldBeInlines(nodes,
+            (NodeType.Strong, "Выделенный двумя символами текст"),
+            (NodeType.Text, " должен становиться полужирным с помощью тега <strong>."));
     }
 
     [Test]
-    public void Spec_Example_Inline_From_Heading()
+    public void Escaping_Simple_FromSpec()
     {
-        var nodes = _parser.Parse("Заголовок с _разными_ символами");
-        ShouldBe(nodes,
-            (NodeType.Text, "Заголовок с "),
-            (NodeType.Em, "разными"),
-            (NodeType.Text, " символами"));
+        var nodes = _parser.Parse(@"\_Вот это\_, не должно выделиться тегом <em>.");
+        ShouldBeInlines(nodes, (NodeType.Text, "_Вот это_, не должно выделиться тегом <em>."));
+    }
+
+    [Test]
+    public void Escaping_CharDisappearsOnlyWhenEscapesSomething_FromSpec()
+    {
+        var nodes = _parser.Parse(@"Здесь сим\волы экранирования\ \должны остаться.\");
+        ShouldBeInlines(nodes, (NodeType.Text, @"Здесь сим\волы экранирования\ \должны остаться.\"));
+    }
+
+    [Test]
+    public void Escaping_EscapeItself_FromSpec()
+    {
+        var nodes = _parser.Parse(@"Символ экранирования тоже можно экранировать: \\_вот это будет выделено тегом_ <em>");
+        ShouldBeInlines(nodes,
+            (NodeType.Text, @"Символ экранирования тоже можно экранировать: \"),
+            (NodeType.Em, "вот это будет выделено тегом"),
+            (NodeType.Text, " <em>"));
+    }
+
+    [Test]
+    public void EmInsideStrong_Works_FromSpec()
+    {
+        var nodes = _parser.Parse("Внутри __двойного выделения _одинарное_ тоже__ работает.");
+        ShouldBeInlines(nodes,
+            (NodeType.Text, "Внутри "),
+            (NodeType.Strong, "двойного выделения "),
+            (NodeType.Em, "одинарное"),
+            (NodeType.Strong, " тоже"),
+            (NodeType.Text, " работает."));
+    }
+
+    [Test]
+    public void StrongInsideEm_NotWorking_FromSpec()
+    {
+        var nodes = _parser.Parse("Но не наоборот — внутри _одинарного __двойное__ не_ работает.");
+        ShouldBeInlines(nodes,
+            (NodeType.Text, "Но не наоборот — внутри "),
+            (NodeType.Em, "одинарного __двойное__ не"),
+            (NodeType.Text, " работает."));
+    }
+
+    [Test]
+    public void UnderscoreBetweenDigits_NotMarkup_FromSpec()
+    {
+        var nodes = _parser.Parse("Подчерки внутри текста c цифрами_12_3 не считаются выделением и должны оставаться символами подчерка.");
+        ShouldBeInlines(nodes, (NodeType.Text, "Подчерки внутри текста c цифрами_12_3 не считаются выделением и должны оставаться символами подчерка."));
+    }
+
+    [Test]
+    public void AcrossWords_NotWorking_FromSpec()
+    {
+        var nodes = _parser.Parse("В то же время выделение в ра_зных сл_овах не работает.");
+        ShouldBeInlines(nodes, (NodeType.Text, "В то же время выделение в ра_зных сл_овах не работает."));
+    }
+
+    [Test]
+    public void UnpairedWithinParagraph_NotMarkup_FromSpec()
+    {
+        var nodes = _parser.Parse("__Непарные_ символы в рамках одного абзаца не считаются выделением.");
+        ShouldBeInlines(nodes, (NodeType.Text, "__Непарные_ символы в рамках одного абзаца не считаются выделением."));
+    }
+
+    [Test]
+    public void OpeningUnderscoreMustBeFollowedByNonSpace_FromSpec()
+    {
+        var nodes = _parser.Parse("За подчерками, начинающими выделение, должен следовать непробельный символ. Иначе эти_ подчерки_ не считаются выделением и остаются просто символами подчерка.");
+        ShouldBeInlines(nodes, (NodeType.Text, "За подчерками, начинающими выделение, должен следовать непробельный символ. Иначе эти_ подчерки_ не считаются выделением и остаются просто символами подчерка."));
+    }
+
+    [Test]
+    public void ClosingUnderscoreMustFollowNonSpace_FromSpec()
+    {
+        var nodes = _parser.Parse("Подчерки, заканчивающие выделение, должны следовать за непробельным символом. Иначе эти _подчерки _не считаются_ окончанием выделения и остаются просто символами подчерка.");
+        ShouldBeInlines(nodes, (NodeType.Text, "Подчерки, заканчивающие выделение, должны следовать за непробельным символом. Иначе эти _подчерки _не считаются_ окончанием выделения и остаются просто символами подчерка."));
+    }
+
+    [Test]
+    public void CrossingStrongAndEm_NoneCounts_FromSpec()
+    {
+        var nodes = _parser.Parse("В случае __пересечения _двойных__ и одинарных_ подчерков ни один из них не считается выделением.");
+        ShouldBeInlines(nodes, (NodeType.Text, "В случае __пересечения _двойных__ и одинарных_ подчерков ни один из них не считается выделением."));
+    }
+
+    [Test]
+    public void EmptyBetweenDelimiters_FourUnderscores_FromSpec()
+    {
+        var nodes = _parser.Parse("Если внутри подчерков пустая строка ____, то они остаются символами подчерка.");
+        ShouldBeInlines(nodes, (NodeType.Text, "Если внутри подчерков пустая строка ____, то они остаются символами подчерка."));
+    }
+
+    [Test]
+    public void Heading_Paragraphs_Pipeline_FromSpec()
+    {
+        var input = "# Заголовок __с _разными_ символами__";
+        var blocks = RunPipeline(input);
+
+        var expected =
+            @"Blocks [
+              Block {
+                RawText: ""Заголовок __с _разными_ символами__"",
+                Inlines: [
+                  Strong(""с ""),
+                  Em(""разными""),
+                  Strong("" символами"")
+                ]
+              }
+            ]";
+
+        ShouldBeBlocks(blocks, expected);
+    }
+
+    [Test]
+    public void Pipeline_Italic_Simple_BlockFormat()
+    {
+        var input = "сер_еди_на тест";
+        var blocks = RunPipeline(input);
+
+        var expected =
+            @"Blocks [
+              Block {
+                RawText: ""сер_еди_на тест"",
+                Inlines: [
+                  Text(""сер""),
+                  Em(""еди""),
+                  Text(""на тест"")
+                ]
+              }
+            ]";
+
+        ShouldBeBlocks(blocks, expected);
+    }
+
+    [Test]
+    public void Pipeline_StrongWithInnerEm_BlockFormat()
+    {
+        var input = "__с _разными_ символами__";
+        var blocks = RunPipeline(input);
+
+        var expected =
+            @"Blocks [
+              Block {
+                RawText: ""__с _разными_ символами__"",
+                Inlines: [
+                  Strong(""с ""),
+                  Em(""разными""),
+                  Strong("" символами"")
+                ]
+              }
+            ]";
+
+        ShouldBeBlocks(blocks, expected);
     }
 }
