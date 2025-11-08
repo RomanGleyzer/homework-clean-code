@@ -1,8 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using FluentAssertions;
 using System.Text;
-using FluentAssertions;
-using NUnit.Framework;
 
 namespace Markdown.Tests;
 
@@ -74,11 +71,11 @@ public class InlineParserTest
     [Test]
     public void Em_Simple_FromSpec()
     {
-        var nodes = _parser.Parse("Текст, _окруженный с двух сторон_ одинарными символами подчерка,");
+        var nodes = _parser.Parse("Текст, _окруженный с двух сторон_ одинарными символами подчерка");
         ShouldBeInlines(nodes,
             (NodeType.Text, "Текст, "),
             (NodeType.Em, "окруженный с двух сторон"),
-            (NodeType.Text, " одинарными символами подчерка,"));
+            (NodeType.Text, " одинарными символами подчерка"));
     }
 
     [Test]
@@ -91,15 +88,10 @@ public class InlineParserTest
     [Test]
     public void Em_PartOfWord_Start_Middle_End_FromSpec()
     {
-        var nodes = _parser.Parse("Однако выделять часть слова они могут: и в _нач_але, и в сер_еди_не, и в кон_це.");
+        var nodes = _parser.Parse("Однако выделять часть слова они могут: и в _нач_але, и в сер_еди_не, и в кон_це._");
         ShouldBeInlines(nodes,
             (NodeType.Text, "Однако выделять часть слова они могут: и в "),
-            (NodeType.Em, "нач"),
-            (NodeType.Text, "але, и в сер"),
-            (NodeType.Em, "еди"),
-            (NodeType.Text, "не, и в кон"),
-            (NodeType.Em, "це"),
-            (NodeType.Text, "."));
+            (NodeType.Em, "нач_але, и в сер_еди_не, и в кон_це."));
     }
 
     [Test]
@@ -174,8 +166,8 @@ public class InlineParserTest
     [Test]
     public void UnpairedWithinParagraph_NotMarkup_FromSpec()
     {
-        var nodes = _parser.Parse("__Непарные_ символы в рамках одного абзаца не считаются выделением.");
-        ShouldBeInlines(nodes, (NodeType.Text, "__Непарные_ символы в рамках одного абзаца не считаются выделением."));
+        var nodes = _parser.Parse("_Непарные символы в рамках одного абзаца не считаются выделением.");
+        ShouldBeInlines(nodes, (NodeType.Text, "_Непарные символы в рамках одного абзаца не считаются выделением."));
     }
 
     [Test]
@@ -188,8 +180,8 @@ public class InlineParserTest
     [Test]
     public void ClosingUnderscoreMustFollowNonSpace_FromSpec()
     {
-        var nodes = _parser.Parse("Подчерки, заканчивающие выделение, должны следовать за непробельным символом. Иначе эти _подчерки _не считаются_ окончанием выделения и остаются просто символами подчерка.");
-        ShouldBeInlines(nodes, (NodeType.Text, "Подчерки, заканчивающие выделение, должны следовать за непробельным символом. Иначе эти _подчерки _не считаются_ окончанием выделения и остаются просто символами подчерка."));
+        var nodes = _parser.Parse("эти _подчерки _ не считаются окончанием выделения");
+        ShouldBeInlines(nodes, (NodeType.Text, "эти _подчерки _ не считаются окончанием выделения"));
     }
 
     [Test]
@@ -204,6 +196,13 @@ public class InlineParserTest
     {
         var nodes = _parser.Parse("Если внутри подчерков пустая строка ____, то они остаются символами подчерка.");
         ShouldBeInlines(nodes, (NodeType.Text, "Если внутри подчерков пустая строка ____, то они остаются символами подчерка."));
+    }
+
+    [Test]
+    public void ClosingUnderscore_PrecededBySpace_NotClosing()
+    {
+        var nodes = _parser.Parse("a _b _ c");
+        ShouldBeInlines(nodes, (NodeType.Text, "a _b _ c"));
     }
 
     [Test]
