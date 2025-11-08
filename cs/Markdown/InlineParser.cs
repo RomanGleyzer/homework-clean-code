@@ -108,26 +108,21 @@ public class InlineParser
         // Проверяем, остались ли открытые выделения
         if (strongOpen || emOpen)
         {
-            var insterts = new List<(int index, string text)>(2)
-            {
-                (strongTextCheckpoint, strongOpen ? "__" : ""),
-                (emTextCheckpoint, emOpen ? "_" : "")
-            };
+            var inserts = new List<(int index, string text)>(2);
+            if (strongOpen) inserts.Add((strongTextCheckpoint, "__"));
+            if (emOpen) inserts.Add((emTextCheckpoint, "_"));
 
-            insterts.Sort((a, b) => b.index.CompareTo(a.index));
+            inserts.Sort((a, b) => b.index.CompareTo(a.index));
 
-            var shift = 0;
-            foreach (var insert in insterts)
-            {
-                textBuffer.Insert(insert.index + shift, insert.text);
-                shift += insert.text.Length;
-            }
+            foreach (var insert in inserts)
+                textBuffer.Insert(insert.index, insert.text);
 
             strongOpen = false;
             emOpen = false;
             strongHasSpace = false;
             emHasSpace = false;
         }
+
 
         AddTextIfBufferNotEmpty(nodes, textBuffer);
         RestorePlaceholders(nodes);
