@@ -73,17 +73,30 @@ public class InlineParser
                         && !CrossesWords(emOpenedInsideWord, IsWordChar(NextChar(preprocessedText, i, 1)), emSawWhitespace)
                         && textBuffer.Length > emTextCheckpoint)
                     {
-                        var content = textBuffer.ToString(emTextCheckpoint, textBuffer.Length - emTextCheckpoint);
-                        textBuffer.Length = emTextCheckpoint;
+                        var emContent = textBuffer.ToString(emTextCheckpoint, textBuffer.Length - emTextCheckpoint);
 
-                        AddTextIfBufferNotEmpty(nodes, textBuffer);
-                        nodes.Add(new Node(content, NodeType.Em));
+                        if (strongOpen && strongTextCheckpoint < emTextCheckpoint)
+                        {
+                            var strongBeforeEm = textBuffer.ToString(strongTextCheckpoint, emTextCheckpoint - strongTextCheckpoint);
+                            textBuffer.Length = strongTextCheckpoint;
+                            AddTextIfBufferNotEmpty(nodes, textBuffer);
+                            nodes.Add(new Node(strongBeforeEm, NodeType.Strong));
+                            strongTextCheckpoint = 0;
+                        }
+                        else
+                        {
+                            textBuffer.Length = emTextCheckpoint;
+                            AddTextIfBufferNotEmpty(nodes, textBuffer);
+                        }
+
+                        nodes.Add(new Node(emContent, NodeType.Em));
 
                         emOpen = false;
                         emSawWhitespace = false;
                         i += 1;
                         continue;
                     }
+
                     else if (!emOpen && CanOpenOrClose(preprocessedText, i, 1, open: true))
                     {
                         emOpen = true;
