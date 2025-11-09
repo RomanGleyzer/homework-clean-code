@@ -22,6 +22,8 @@ public class InlineParser
         var strongSawWhitespace = false;
         var emSawWhitespace = false;
 
+        var emSawStrongCloser = false;
+
         for (int i = 0; i < preprocessedText.Length;)
         {
             if (preprocessedText[i] == '_')
@@ -32,11 +34,13 @@ public class InlineParser
                 {
                     if (emOpen)
                     {
+                        emSawStrongCloser = true;
                         textBuffer.Append("__");
                         i += 2;
                         continue;
                     }
-                    else if (strongOpen && CanOpenOrClose(preprocessedText, i, 2, open: false)
+                    else if (strongOpen
+                             && CanOpenOrClose(preprocessedText, i, 2, open: false)
                              && !CrossesWords(strongOpenedInsideWord, IsWordChar(NextChar(preprocessedText, i, 2)), strongSawWhitespace)
                              && textBuffer.Length > strongTextCheckpoint)
                     {
@@ -69,10 +73,33 @@ public class InlineParser
                 }
                 else
                 {
-                    if (emOpen && CanOpenOrClose(preprocessedText, i, 1, open: false)
+                    if (emOpen
+                        && CanOpenOrClose(preprocessedText, i, 1, open: false)
                         && !CrossesWords(emOpenedInsideWord, IsWordChar(NextChar(preprocessedText, i, 1)), emSawWhitespace)
                         && textBuffer.Length > emTextCheckpoint)
                     {
+                        if (strongOpen && strongTextCheckpoint < emTextCheckpoint && emSawStrongCloser)
+                        {
+                            var inserts = new List<(int index, string text)>(2)
+                        {
+                            (strongTextCheckpoint, "__"),
+                            (emTextCheckpoint, "_")
+                        };
+                            inserts.Sort((a, b) => b.index.CompareTo(a.index));
+                            foreach (var ins in inserts)
+                                textBuffer.Insert(ins.index, ins.text);
+
+                            strongOpen = false;
+                            emOpen = false;
+                            strongSawWhitespace = false;
+                            emSawWhitespace = false;
+                            emSawStrongCloser = false;
+
+                            textBuffer.Append('_');
+                            i += 1;
+                            continue;
+                        }
+
                         var emContent = textBuffer.ToString(emTextCheckpoint, textBuffer.Length - emTextCheckpoint);
 
                         if (strongOpen && strongTextCheckpoint < emTextCheckpoint)
@@ -81,7 +108,8 @@ public class InlineParser
                             textBuffer.Length = strongTextCheckpoint;
                             AddTextIfBufferNotEmpty(nodes, textBuffer);
                             nodes.Add(new Node(strongBeforeEm, NodeType.Strong));
-                            strongTextCheckpoint = 0;
+
+                            strongTextCheckpoint = textBuffer.Length;
                         }
                         else
                         {
@@ -93,16 +121,17 @@ public class InlineParser
 
                         emOpen = false;
                         emSawWhitespace = false;
+                        emSawStrongCloser = false;
                         i += 1;
                         continue;
                     }
-
                     else if (!emOpen && CanOpenOrClose(preprocessedText, i, 1, open: true))
                     {
                         emOpen = true;
                         emTextCheckpoint = textBuffer.Length;
                         emOpenedInsideWord = IsWordChar(PrevChar(preprocessedText, i));
                         emSawWhitespace = false;
+                        emSawStrongCloser = false;
                         i += 1;
                         continue;
                     }
@@ -125,7 +154,7 @@ public class InlineParser
                 }
 
                 textBuffer.Append(ch);
-                i++;
+                i += 1;
             }
         }
 
