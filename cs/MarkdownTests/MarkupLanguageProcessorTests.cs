@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using Markdown;
+using Markdown.Inlines;
 
 namespace MarkdownTests;
 

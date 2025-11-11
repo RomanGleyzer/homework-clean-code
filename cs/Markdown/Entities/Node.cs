@@ -1,4 +1,4 @@
-﻿namespace Markdown;
+﻿namespace Markdown.Entities;
 
 public class Node(string? text, NodeType type)
 {

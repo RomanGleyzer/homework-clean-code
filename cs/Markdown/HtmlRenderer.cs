@@ -1,5 +1,6 @@
 ﻿namespace Markdown;
 
+using Markdown.Entities;
 using System.Text;
 
 public class HtmlRenderer

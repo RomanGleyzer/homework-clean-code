@@ -1,4 +1,4 @@
-﻿namespace Markdown;
+﻿namespace Markdown.Entities;
 
 public class Block(string rawText, BlockType type)
 {

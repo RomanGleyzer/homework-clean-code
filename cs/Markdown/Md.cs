@@ -1,4 +1,6 @@
-﻿namespace Markdown;
+﻿using Markdown.Inlines;
+
+namespace Markdown;
 
 public class Md
 {

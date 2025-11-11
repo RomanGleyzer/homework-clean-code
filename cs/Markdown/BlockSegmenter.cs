@@ -1,4 +1,6 @@
-﻿namespace Markdown;
+﻿using Markdown.Entities;
+
+namespace Markdown;
 
 public class BlockSegmenter
 {
