@@ -12,7 +12,7 @@ public class HtmlRenderer
         for (int i = 0; i < blocks.Count; i++)
         {
             var block = blocks[i];
-            var inner = RenderInlines(block.Inlines);
+            var inner = RenderInlines(block.Inlines, block.Type);
 
             switch (block.Type)
             {
@@ -32,12 +32,13 @@ public class HtmlRenderer
         return sb.ToString();
     }
 
-    private static string RenderInlines(IReadOnlyList<Node> inlines)
+    private static string RenderInlines(IReadOnlyList<Node> inlines, BlockType context)
     {
         var sb = new StringBuilder();
 
-        foreach (var node in inlines)
+        for (int i = 0; i < inlines.Count; i++)
         {
+            var node = inlines[i];
             switch (node.Type)
             {
                 case NodeType.Text:
@@ -51,9 +52,41 @@ public class HtmlRenderer
                     break;
 
                 case NodeType.Strong:
-                    sb.Append("<strong>")
-                      .Append(node.Text ?? string.Empty)
-                      .Append("</strong>");
+                    if (context == BlockType.Heading)
+                    {
+                        sb.Append("<strong>")
+                          .Append(node.Text ?? string.Empty);
+
+                        var j = i + 1;
+                        while (j < inlines.Count)
+                        {
+                            var n = inlines[j];
+                            if (n.Type == NodeType.Em)
+                            {
+                                sb.Append("<em>")
+                                  .Append(n.Text ?? string.Empty)
+                                  .Append("</em>");
+                                j++;
+                                continue;
+                            }
+                            if (n.Type == NodeType.Strong)
+                            {
+                                sb.Append(n.Text ?? string.Empty);
+                                j++;
+                                continue;
+                            }
+                            break;
+                        }
+
+                        sb.Append("</strong>");
+                        i = j - 1;
+                    }
+                    else
+                    {
+                        sb.Append("<strong>")
+                          .Append(node.Text ?? string.Empty)
+                          .Append("</strong>");
+                    }
                     break;
             }
         }

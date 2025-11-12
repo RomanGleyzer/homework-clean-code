@@ -59,14 +59,26 @@ public class InlineParser
                     var nextChar = text[i + 1];
 
                     if (nextChar == Underscore)
+                    {
                         sb.Append(PlaceholderUnderscore);
+                    }
                     else if (nextChar == Escape)
-                        sb.Append(PlaceholderBackslash);
+                    {
+                        var afterPair = i + 2 < text.Length ? text[i + 2] : '\0';
+                        if (afterPair == Underscore || afterPair == '#')
+                            sb.Append(PlaceholderBackslash);
+                        else
+                            sb.Append(Escape).Append(Escape);
+                    }
                     else if (nextChar == '#')
+                    {
                         sb.Append(PlaceholderHash);
+                    }
                     else
+                    {
                         sb.Append(Escape).Append(nextChar);
-
+                    }
+                    
                     i++;
                 }
                 else

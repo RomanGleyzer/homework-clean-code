@@ -20,17 +20,11 @@ public class BlockSegmenter
         return blocks;
     }
 
-    /// <summary>
-    /// Делит текст на абзацы
-    /// </summary>
     private static string[] SplitToParagraphs(string text)
     {
         return text.Split(["\r\n\r\n", "\n\n"], StringSplitOptions.RemoveEmptyEntries);
     }
 
-    /// <summary>
-    /// Определяет тип абзаца: обычный или заголовок
-    /// </summary>
     private static BlockType IdentifyBlockType(string paragraph)
     {
         return paragraph.StartsWith("# ")
@@ -38,9 +32,6 @@ public class BlockSegmenter
             : BlockType.Paragraph;
     }
 
-    /// <summary>
-    /// Очищает текст от управляющих символов в зависимости от типа блока (например, убирает символы '#' для заголовков)
-    /// </summary>
     private static string ClearRawText(string rawText, BlockType blockType)
     {
         return blockType switch
@@ -51,9 +42,6 @@ public class BlockSegmenter
         };
     }
 
-    /// <summary>
-    /// Создает блок заданного типа из текста
-    /// </summary>
     private static Block CreateBlock(string rawText, BlockType blockType)
     {
         return blockType switch

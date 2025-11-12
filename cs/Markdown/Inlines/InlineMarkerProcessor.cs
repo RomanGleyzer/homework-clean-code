@@ -22,8 +22,6 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
     private bool _strongSawWhitespace;
     private bool _emSawWhitespace;
 
-    private bool _emSawStrongCloser;
-
     public void OnWhitespace()
     {
         if (_isStrongOpen) _strongSawWhitespace = true;
@@ -32,10 +30,23 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
 
     public bool TryHandleStrong(ref int i)
     {
+        if (_isEmOpen && _isStrongOpen && _strongStartIndex < _emStartIndex)
+        {
+            _buffer.InsertFromEnd([(_strongStartIndex, StrongMarker), (_emStartIndex, EmMarker)]);
+
+            _isStrongOpen = false;
+            _isEmOpen = false;
+            _strongSawWhitespace = false;
+            _emSawWhitespace = false;
+
+            _buffer.Append(StrongMarker);
+            i += 2;
+            return true;
+        }
+
         if (_isEmOpen)
         {
             _buffer.Append(StrongMarker);
-            _emSawStrongCloser = true;
             i += 2;
             return true;
         }
@@ -59,6 +70,17 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
 
     public bool TryHandleEm(ref int i)
     {
+        if (_isEmOpen && _emOpenedInsideWord && _emSawWhitespace)
+        {
+            _buffer.Insert(_emStartIndex, EmMarker);
+            _isEmOpen = false;
+            _emSawWhitespace = false;
+
+            _buffer.Append(Underscore);
+            i += 1;
+            return true;
+        }
+
         if (ShouldCloseEm(i))
         {
             CloseEm(ref i);
@@ -90,17 +112,29 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
         ResetMarkerState();
     }
 
-    private bool ShouldCloseStrong(int i)
-    {
-        return _isStrongOpen &&
-            CanOpenOrCloseMarker(_input, i, 2, open: false) &&
-            !IsCrossingWords(_strongOpenedInsideWord, IsWordChar(GetNextChar(_input, i, 2)), _strongSawWhitespace) &&
-            _buffer.Length > _strongStartIndex;
-    }
-
     private bool ShouldOpenStrong(int i)
     {
         return !_isStrongOpen && CanOpenOrCloseMarker(_input, i, 2, open: true);
+    }
+
+    private bool ShouldCloseStrong(int i)
+    {
+        if (_isStrongOpen && _strongOpenedInsideWord && _strongSawWhitespace)
+            return false;
+
+        return _isStrongOpen &&
+               CanOpenOrCloseMarker(_input, i, 2, open: false) &&
+               !IsCrossingWords(_strongOpenedInsideWord, IsWordChar(GetNextChar(_input, i, 2)), _strongSawWhitespace) &&
+               _buffer.Length > _strongStartIndex;
+    }
+
+    private void OpenStrong(ref int i)
+    {
+        _isStrongOpen = true;
+        _strongStartIndex = _buffer.Length;
+        _strongOpenedInsideWord = IsWordChar(GetPrevChar(_input, i));
+        _strongSawWhitespace = false;
+        i += 2;
     }
 
     private void CloseStrong(ref int i)
@@ -116,52 +150,34 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
         i += 2;
     }
 
-    private void OpenStrong(ref int i)
-    {
-        _isStrongOpen = true;
-        _strongStartIndex = _buffer.Length;
-        _strongOpenedInsideWord = IsWordChar(GetPrevChar(_input, i));
-        _strongSawWhitespace = false;
-        i += 2;
-    }
-
-    private bool ShouldCloseEm(int i)
-    {
-        return _isEmOpen &&
-            CanOpenOrCloseMarker(_input, i, 1, open: false) &&
-            !IsCrossingWords(_emOpenedInsideWord, IsWordChar(GetNextChar(_input, i, 1)), _emSawWhitespace) &&
-            _buffer.Length > _emStartIndex;
-    }
-
     private bool ShouldOpenEm(int i)
     {
         return !_isEmOpen && CanOpenOrCloseMarker(_input, i, 1, open: true);
     }
 
+    private bool ShouldCloseEm(int i)
+    {
+        return _isEmOpen &&
+               CanOpenOrCloseMarker(_input, i, 1, open: false) &&
+               !IsCrossingWords(_emOpenedInsideWord, IsWordChar(GetNextChar(_input, i, 1)), _emSawWhitespace) &&
+               _buffer.Length > _emStartIndex;
+    }
+
+    private void OpenEm(ref int i)
+    {
+        _isEmOpen = true;
+        _emStartIndex = _buffer.Length;
+        _emOpenedInsideWord = IsWordChar(GetPrevChar(_input, i));
+        _emSawWhitespace = false;
+        i += 1;
+    }
+
     private void CloseEm(ref int i)
     {
-        // Случай конфликта Strong внутри Em
-        if (_isStrongOpen && _strongStartIndex < _emStartIndex && _emSawStrongCloser)
-        {
-            var inserts = new List<(int index, string text)>
-            {
-                (_strongStartIndex, StrongMarker),
-                (_emStartIndex, EmMarker)
-            };
-
-            _buffer.InsertFromEnd(inserts);
-            ResetMarkerState();
-            _buffer.Append(Underscore);
-            i += 1;
-            return;
-        }
-
-        // Нормальное закрытие Em
         var emContent = _buffer.ToString(_emStartIndex, _buffer.Length - _emStartIndex);
 
         if (_isStrongOpen && _strongStartIndex < _emStartIndex)
         {
-            // Strong до Em — сначала закрываем Strong
             var strongBeforeEm = _buffer.ToString(_strongStartIndex, _emStartIndex - _strongStartIndex);
             _buffer.Length = _strongStartIndex;
             _buffer.CommitText(_nodes);
@@ -178,17 +194,6 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
 
         _isEmOpen = false;
         _emSawWhitespace = false;
-        _emSawStrongCloser = false;
-        i += 1;
-    }
-
-    private void OpenEm(ref int i)
-    {
-        _isEmOpen = true;
-        _emStartIndex = _buffer.Length;
-        _emOpenedInsideWord = IsWordChar(GetPrevChar(_input, i));
-        _emSawWhitespace = false;
-        _emSawStrongCloser = false;
         i += 1;
     }
 
@@ -198,6 +203,5 @@ public class InlineMarkerProcessor(string input, List<Node> nodes, StringBuilder
         _isEmOpen = false;
         _strongSawWhitespace = false;
         _emSawWhitespace = false;
-        _emSawStrongCloser = false;
     }
 }

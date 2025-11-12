@@ -13,6 +13,11 @@ public class MarkupLanguageProcessorTests
         return md.Render(input, new BlockSegmenter(), new InlineParser(), new HtmlRenderer());
     }
 
+    private static string Normalize(string s)
+    {
+        return s.ReplaceLineEndings("");
+    }
+
     private static void ShouldBeHtmlParagraph(string input, string innerHtml)
     {
         RenderHtml(input).Should().Be($"<p>{innerHtml}</p>");
@@ -128,7 +133,7 @@ public class MarkupLanguageProcessorTests
     }
 
     [Test]
-    public void ParseAndRender_EmPartOfWord_StartMiddleEnd()
+    public void ParseAndRender_EmPartOfWord_RendersAtStartMiddleEnd()
     {
         var input = "Однако выделять часть слова они могут: и в _нач_але, и в сер_еди_не, и в кон_це._";
 
@@ -136,7 +141,7 @@ public class MarkupLanguageProcessorTests
     }
 
     [Test]
-    public void ParseAndRender_StrongInsideEm_NotWorking()
+    public void ParseAndRender_StrongInsideEm_NotApplied()
     {
         var input = "Но не наоборот — внутри _одинарного __двойное__ не_ работает.";
 
@@ -160,7 +165,7 @@ public class MarkupLanguageProcessorTests
     }
 
     [Test]
-    public void ParseAndRender_StrongPartOfWord_StartMiddleEnd()
+    public void ParseAndRender_StrongPartOfWord_RendersAtStartMiddleEnd()
     {
         var input = "и в __нач__але, и в сер__еди__не, и в кон__це__.";
 
@@ -176,21 +181,29 @@ public class MarkupLanguageProcessorTests
     }
 
     [Test]
-    public void ParseAndRender_DelimitersWithPunctuation_AfterAndBefore()
+    public void ParseAndRender_DelimiterFollowedByPunctuation_CommaAfter()
     {
         var leftInput = "_a_,";
         ShouldBeHtmlParagraph(leftInput, "<em>a</em>,");
+    }
 
+    [Test]
+    public void ParseAndRender_PunctuationBeforeDelimiter_PeriodBefore()
+    {
         var rightInput = "._b_";
         ShouldBeHtmlParagraph(rightInput, ".<em>b</em>");
     }
 
     [Test]
-    public void ParseAndRender_EmAndStrongAtStringEdges_ProducesExpectedHtml()
+    public void ParseAndRender_EmAtStringStart_ProducesExpectedHtml()
     {
         var startInput = "_abc_ в начале";
         ShouldBeHtmlParagraph(startInput, "<em>abc</em> в начале");
+    }
 
+    [Test]
+    public void ParseAndRender_StrongAtStringEnd_ProducesExpectedHtml()
+    {
         var endInput = "в конце __abc__";
         ShouldBeHtmlParagraph(endInput, "в конце <strong>abc</strong>");
     }
@@ -220,9 +233,93 @@ public class MarkupLanguageProcessorTests
     }
 
     [Test]
-    public void ParseAndRender_H1_Simple()
+    public void ParseAndRender_H1_Simple_ProducesH1()
     {
         var input = "# Заголовок";
         ShouldBeHtmlH1(input, "Заголовок");
+    }
+
+    [Test]
+    public void ParseAndRender_TwoParagraphs_Simple_ProducesTwoParagraphs()
+    {
+        var input = "первый абзац\n\nвторой абзац";
+        Normalize(RenderHtml(input)).Should().Be("<p>первый абзац</p><p>второй абзац</p>");
+    }
+
+    [Test]
+    public void ParseAndRender_H1ThenParagraph_WithInlineMarkup_ProducesExpectedHtml()
+    {
+        var input =
+            "# Заголовок __с _разными_ символами__\n\n" +
+            "Текст про _эм_ и __стронг__.";
+        var expected =
+            "<h1>Заголовок <strong>с <em>разными</em> символами</strong></h1>" +
+            "<p>Текст про <em>эм</em> и <strong>стронг</strong>.</p>";
+        Normalize(RenderHtml(input)).Should().Be(expected);
+    }
+
+    [Test]
+    public void ParseAndRender_EmphasisAcrossParagraphs_DoesNotSpan()
+    {
+        var input = "Начало _абзаца\n\nпродолжение_ абзаца";
+        var expected = "<p>Начало _абзаца</p><p>продолжение_ абзаца</p>";
+        Normalize(RenderHtml(input)).Should().Be(expected);
+    }
+
+    [Test]
+    public void ParseAndRender_EscapedHash_IsNotHeading()
+    {
+        var input = @"\# Не заголовок";
+        ShouldBeHtmlParagraph(input, "# Не заголовок");
+    }
+
+    [Test]
+    public void ParseAndRender_H1_WithEscapesInside_ProducesExpectedHtml()
+    {
+        var input = @"# Тест \_эм\_ и \\__стронг__";
+        var expected = "<h1>Тест _эм_ и \\<strong>стронг</strong></h1>";
+        Normalize(RenderHtml(input)).Should().Be(expected);
+    }
+
+    [Test]
+    public void ParseAndRender_MultipleEmptyLines_BetweenParagraphs_ProducesTwoParagraphs()
+    {
+        var input = "a\n\n\n\nb";
+        Normalize(RenderHtml(input)).Should().Be("<p>a</p><p>b</p>");
+    }
+
+    [Test]
+    public void ParseAndRender_TrailingBackslash_StaysInOutput()
+    {
+        var input = @"abc\";
+        ShouldBeHtmlParagraph(input, @"abc\");
+    }
+
+    [Test]
+    public void ParseAndRender_ThreeParagraphs_MixedBlocks_ProducesExpectedHtml()
+    {
+        var input = "_эм_ абзац\n\n# Заголовок\n\ntext __bold__";
+        var expected = "<p><em>эм</em> абзац</p><h1>Заголовок</h1><p>text <strong>bold</strong></p>";
+        Normalize(RenderHtml(input)).Should().Be(expected);
+    }
+
+    [Test]
+    public void ParseAndRender_ParagraphFromSpec_AllRulesTogether_ProducesExpectedHtml()
+    {
+        const string Paragraph =
+            "# Заголовок __с _разными_ символами__\n\n" +
+            "Текст, _окруженный_ и __сильный__ и \\_экранированный\\_ 12_3 " +
+            "слово ра_зных сл_овах не работает. __Непарные_ и _непарные__ . " +
+            "Внутри __двойного _одинарное_ тоже__ работает. " +
+            "Но _внутри __одинарного__ не_ работает. Конец\\\\\n\n";
+
+        var expected =
+            "<h1>Заголовок <strong>с <em>разными</em> символами</strong></h1>" +
+            "<p>Текст, <em>окруженный</em> и <strong>сильный</strong> и _экранированный_ 12_3 " +
+            "слово ра_зных сл_овах не работает. __Непарные_ и _непарные__ . " +
+            "Внутри <strong>двойного </strong><em>одинарное</em><strong> тоже</strong> работает. " +
+            "Но <em>внутри __одинарного__ не</em> работает. Конец\\\\</p>";
+
+        Normalize(RenderHtml(Paragraph)).Should().Be(expected);
     }
 }
