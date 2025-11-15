@@ -6,7 +6,7 @@ public class Block(string rawText, BlockType type)
 
     public BlockType Type { get; } = type;
 
-    public IReadOnlyList<Node> Inlines { get; set; } = [];
+    public IReadOnlyList<Node> Inlines { get; init; } = [];
 }
 
 public enum BlockType

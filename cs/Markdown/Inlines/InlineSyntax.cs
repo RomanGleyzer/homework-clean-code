@@ -5,6 +5,7 @@ public static class InlineSyntax
     public const char Escape = '\\';
     public const char Underscore = '_';
     public const char Space = ' ';
+    public const char Hash = '#';
 
     public const char PlaceholderUnderscore = '\uE000';
     public const char PlaceholderBackslash = '\uE001';

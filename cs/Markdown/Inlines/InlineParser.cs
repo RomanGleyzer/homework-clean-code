@@ -108,7 +108,7 @@ public class InlineParser
         return text?
             .Replace(PlaceholderUnderscore, Underscore)
             .Replace(PlaceholderBackslash, Escape)
-            .Replace(PlaceholderHash, '#');
+            .Replace(PlaceholderHash, Hash);
     }
 
     private static int CountSequentialUnderscores(string text, int position)

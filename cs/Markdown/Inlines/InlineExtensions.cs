@@ -1,15 +1,16 @@
-﻿using Markdown.Entities;
-using System.Text;
+﻿using System.Text;
+using Markdown.Entities;
 
 namespace Markdown.Inlines;
 
 public static class InlineExtensions
 {
-    public static void CommitText(this StringBuilder buffer, List<Node> nodes)
+    public static void CommitText(this StringBuilder builder, List<Node> nodes)
     {
-        if (buffer.Length <= 0) return;
-        nodes.Add(new Node(buffer.ToString(), NodeType.Text));
-        buffer.Clear();
+        if (builder.Length == 0) return;
+
+        nodes.Add(new Node(builder.ToString(), NodeType.Text));
+        builder.Clear();
     }
 
     public static void MergeTextNodes(this List<Node> nodes)
