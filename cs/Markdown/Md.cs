@@ -2,9 +2,9 @@
 
 namespace Markdown;
 
-public class Md
+public class Md(BlockSegmenter segmenter, InlineParser parser, HtmlRenderer renderer)
 {
-    public string Render(string text, BlockSegmenter segmenter, InlineParser parser, HtmlRenderer renderer)
+    public string Render(string text)
     {
         var blocks = segmenter.Segment(text);
 

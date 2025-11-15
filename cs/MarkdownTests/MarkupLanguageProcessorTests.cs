@@ -9,8 +9,8 @@ public class MarkupLanguageProcessorTests
 {
     private static string RenderHtml(string input)
     {
-        var md = new Md();
-        return md.Render(input, new BlockSegmenter(), new InlineParser(), new HtmlRenderer());
+        var md = new Md(new BlockSegmenter(), new InlineParser(), new HtmlRenderer());
+        return md.Render(input);
     }
 
     private static string Normalize(string s)

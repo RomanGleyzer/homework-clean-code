@@ -1,8 +1,8 @@
-﻿using System.Diagnostics;
-using System.Text;
-using FluentAssertions;
-
+﻿using FluentAssertions;
 using Markdown;
+using Markdown.Inlines;
+using System.Diagnostics;
+using System.Text;
 
 namespace MarkdownTests;
 
@@ -29,10 +29,7 @@ public class PerformanceTests
     [Test]
     public void Render_InputSizeIncreases_ScalesLinearlyOrBetter()
     {
-        var md = new Md();
-        var segmenter = new BlockSegmenter();
-        var parser = new Markdown.Inlines.InlineParser();
-        var renderer = new HtmlRenderer();
+        var md = new Md(new BlockSegmenter(), new InlineParser(), new HtmlRenderer());
 
         var sizes = new[] { 2_000, 16_000, 128_000, 1_000_000 };
         var timesMs = new double[sizes.Length];
@@ -42,7 +39,7 @@ public class PerformanceTests
             var input = BuildInput(sizes[i]);
 
             var sw = Stopwatch.StartNew();
-            var html = md.Render(input, segmenter, parser, renderer);
+            var html = md.Render(input);
             sw.Stop();
 
             html.Should().NotBeNullOrEmpty();
