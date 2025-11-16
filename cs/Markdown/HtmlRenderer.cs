@@ -52,7 +52,7 @@ public class HtmlRenderer
             switch (node.Type)
             {
                 case NodeType.Text:
-                    if (!string.IsNullOrEmpty(node.Text)) 
+                    if (!string.IsNullOrEmpty(node.Text))
                         sb.Append(node.Text);
                     break;
 
@@ -101,7 +101,7 @@ public class HtmlRenderer
             {
                 if (!string.IsNullOrEmpty(nextNode.Text))
                     sb.Append(EmOpen).Append(nextNode.Text).Append(EmClose);
-                
+
                 nextIndex++;
                 continue;
             }
@@ -110,7 +110,7 @@ public class HtmlRenderer
             {
                 if (!string.IsNullOrEmpty(nextNode.Text))
                     sb.Append(nextNode.Text);
-                
+
                 nextIndex++;
                 continue;
             }

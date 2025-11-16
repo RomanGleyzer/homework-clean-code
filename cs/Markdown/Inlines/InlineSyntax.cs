@@ -5,7 +5,8 @@ public static class InlineSyntax
     public const char Escape = '\\';
     public const char Underscore = '_';
     public const char Space = ' ';
-    public const char Hash = '#';
+    public const char Sharp = '#';
+    public const char EndOfText = '\0';
 
     public const char PlaceholderUnderscore = '\uE000';
     public const char PlaceholderBackslash = '\uE001';
@@ -41,11 +42,6 @@ public static class InlineSyntax
     public static char GetNextChar(string text, int position, int length)
     {
         return position + length < text.Length ? text[position + length] : Space;
-    }
-
-    public static bool IsWordChar(char ch)
-    {
-        return char.IsLetterOrDigit(ch);
     }
 
     public static bool IsCrossingWords(bool openedInsideWord, bool closingInsideWord, bool sawWhitespace)

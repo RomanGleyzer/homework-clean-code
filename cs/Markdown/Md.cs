@@ -14,9 +14,9 @@ public class Md(BlockSegmenter segmenter, InlineParser parser, HtmlRenderer rend
         {
             var inlines = parser.Parse(block.RawText);
 
-            blocks.Add(new Block(block.RawText, block.Type) 
-            { 
-                Inlines = inlines 
+            blocks.Add(new Block(block.RawText, block.Type)
+            {
+                Inlines = inlines
             });
         }
 

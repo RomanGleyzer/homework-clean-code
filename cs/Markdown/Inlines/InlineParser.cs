@@ -6,116 +6,250 @@ namespace Markdown.Inlines;
 
 public class InlineParser
 {
+    private const int StrongLength = 2;
+    private const int EmLength = 1;
+
+    private bool _isStrongOpen;
+    private bool _isEmOpen;
+
+    private int _strongStartIndex;
+    private int _emStartIndex;
+
+    private bool _strongOpenedInsideWord;
+    private bool _emOpenedInsideWord;
+
+    private bool _strongSawWhitespace;
+    private bool _emSawWhitespace;
+
     public IReadOnlyList<Node> Parse(string text)
     {
-        var input = PreprocessEscapes(text);
+        ResetInlineMarkers();
+
+        var input = InlineEscapesNormalizer.Normalize(text);
 
         var nodes = new List<Node>();
-        var buffer = new StringBuilder();
+        var textBuilder = new StringBuilder(input.Length);
 
-        var processor = new InlineMarkerProcessor(input, nodes, buffer);
-
-        for (int i = 0; i < input.Length;)
+        for (int index = 0; index < input.Length;)
         {
-            if (input[i] == Underscore)
+            var current = input[index];
+
+            if (current == Underscore)
             {
-                var underscoresAmount = CountSequentialUnderscores(input, i);
-                if (underscoresAmount >= 2)
-                {
-                    if (processor.TryHandleStrong(ref i)) continue;
-                }
-                else
-                {
-                    if (processor.TryHandleEm(ref i)) continue;
-                }
+                index = HandleUnderscore(input, index, textBuilder, nodes);
+                continue;
             }
 
-            var ch = input[i];
-            if (char.IsWhiteSpace(ch))
-                processor.OnWhitespace();
+            if (char.IsWhiteSpace(current))
+                MarkWhitespace();
 
-            buffer.Append(ch);
-            i += 1;
+            textBuilder.Append(current);
+            index++;
         }
 
-        processor.FinalizeUnclosedMarkers();
+        FinalizeUnclosedMarkers(textBuilder);
+        textBuilder.CommitText(nodes);
 
-        buffer.CommitText(nodes);
-        TranslatePlaceholdersBack(nodes);
+        InlineEscapesNormalizer.RestorePlaceholders(nodes);
         nodes.MergeTextNodes();
 
         return nodes;
     }
 
-    private static string PreprocessEscapes(string text)
+    private int HandleUnderscore(string input, int index, StringBuilder textBuilder, List<Node> nodes)
     {
-        var sb = new StringBuilder();
-        for (int i = 0; i < text.Length; i++)
+        var slice = input.AsSpan(index);
+
+        if (slice.StartsWith(StrongMarker))
+            return HandleStrong(input, index, textBuilder, nodes);
+
+        return HandleEm(input, index, textBuilder, nodes);
+    }
+
+    private int HandleStrong(string input, int index, StringBuilder textBuilder, List<Node> nodes)
+    {
+        if (_isEmOpen && _isStrongOpen && _strongStartIndex < _emStartIndex)
         {
-            if (text[i] == Escape)
-            {
-                if (i + 1 < text.Length)
-                {
-                    var nextChar = text[i + 1];
+            textBuilder.InsertFromEnd(
+            [
+                (_strongStartIndex, StrongMarker),
+                (_emStartIndex, EmMarker)
+            ]);
 
-                    if (nextChar == Underscore)
-                    {
-                        sb.Append(PlaceholderUnderscore);
-                    }
-                    else if (nextChar == Escape)
-                    {
-                        var afterPair = i + 2 < text.Length ? text[i + 2] : '\0';
-                        if (afterPair == Underscore || afterPair == '#')
-                            sb.Append(PlaceholderBackslash);
-                        else
-                            sb.Append(Escape).Append(Escape);
-                    }
-                    else if (nextChar == '#')
-                    {
-                        sb.Append(PlaceholderHash);
-                    }
-                    else
-                    {
-                        sb.Append(Escape).Append(nextChar);
-                    }
-                    
-                    i++;
-                }
-                else
-                {
-                    sb.Append(Escape);
-                }
-            }
-            else
-            {
-                sb.Append(text[i]);
-            }
+            ResetInlineMarkers();
+
+            textBuilder.Append(StrongMarker);
+            return index + StrongLength;
         }
-        return sb.ToString();
-    }
 
-    private static void TranslatePlaceholdersBack(List<Node> nodes)
-    {
-        for (int i = 0; i < nodes.Count; i++)
+        if (_isEmOpen)
         {
-            var restoredText = RestoreTextPlaceholders(nodes[i].Text) ?? string.Empty;
-            nodes[i] = new Node(restoredText, nodes[i].Type);
+            textBuilder.Append(StrongMarker);
+            return index + StrongLength;
         }
+
+        if (ShouldOpenStrong(input, index))
+        {
+            OpenStrong(input, index, textBuilder);
+            return index + StrongLength;
+        }
+
+        if (ShouldCloseStrong(input, index, textBuilder))
+        {
+            CloseStrong(textBuilder, nodes);
+            return index + StrongLength;
+        }
+
+        textBuilder.Append(StrongMarker);
+        return index + StrongLength;
     }
 
-    private static string? RestoreTextPlaceholders(string? text)
+    private int HandleEm(string input, int index, StringBuilder textBuilder, List<Node> nodes)
     {
-        return text?
-            .Replace(PlaceholderUnderscore, Underscore)
-            .Replace(PlaceholderBackslash, Escape)
-            .Replace(PlaceholderHash, Hash);
+        if (_isEmOpen && _emOpenedInsideWord && _emSawWhitespace)
+        {
+            textBuilder.Insert(_emStartIndex, EmMarker);
+            _isEmOpen = false;
+            _emSawWhitespace = false;
+
+            textBuilder.Append(Underscore);
+            return index + EmLength;
+        }
+
+        if (ShouldOpenEm(input, index))
+        {
+            OpenEm(input, index, textBuilder);
+            return index + EmLength;
+        }
+
+        if (ShouldCloseEm(input, index, textBuilder))
+        {
+            CloseEm(textBuilder, nodes);
+            return index + EmLength;
+        }
+
+        textBuilder.Append(Underscore);
+        return index + EmLength;
     }
 
-    private static int CountSequentialUnderscores(string text, int position)
+    private bool ShouldOpenStrong(string input, int index)
     {
-        var length = 0;
-        while (position + length < text.Length && text[position + length] == Underscore)
-            length++;
-        return length;
+        return !_isStrongOpen && CanOpenOrCloseMarker(text: input, position: index, length: 2, open: true);
+    }
+
+    private bool ShouldCloseStrong(string input, int index, StringBuilder textBuilder)
+    {
+        if (_isStrongOpen && _strongOpenedInsideWord && _strongSawWhitespace)
+            return false;
+
+        var nextChar = GetNextChar(text: input, position: index, length: 2);
+
+        return _isStrongOpen &&
+              CanOpenOrCloseMarker(text: input, position: index, length: 2, open: false) &&
+              !IsCrossingWords(_strongOpenedInsideWord, char.IsLetterOrDigit(nextChar), _strongSawWhitespace) &&
+              textBuilder.Length > _strongStartIndex;
+    }
+
+    private void OpenStrong(string input, int index, StringBuilder textBuilder)
+    {
+        _isStrongOpen = true;
+        _strongStartIndex = textBuilder.Length;
+        _strongOpenedInsideWord = char.IsLetterOrDigit(GetPrevChar(input, index));
+        _strongSawWhitespace = false;
+    }
+
+    private void CloseStrong(StringBuilder textBuilder, List<Node> nodes)
+    {
+        var content = textBuilder.ToString(_strongStartIndex, textBuilder.Length - _strongStartIndex);
+        textBuilder.Length = _strongStartIndex;
+
+        textBuilder.CommitText(nodes);
+        nodes.Add(new Node(content, NodeType.Strong));
+
+        _isStrongOpen = false;
+        _strongSawWhitespace = false;
+    }
+
+    private bool ShouldOpenEm(string input, int index)
+    {
+        return !_isEmOpen && CanOpenOrCloseMarker(input, index, 1, open: true);
+    }
+
+    private bool ShouldCloseEm(string input, int index, StringBuilder buffer)
+    {
+        var nextChar = GetNextChar(text: input, position: index, length: 1);
+
+        return _isEmOpen &&
+               CanOpenOrCloseMarker(input, index, 1, open: false) &&
+               !IsCrossingWords(_emOpenedInsideWord, char.IsLetterOrDigit(nextChar), _emSawWhitespace) &&
+               buffer.Length > _emStartIndex;
+    }
+
+    private void OpenEm(string input, int index, StringBuilder textBuilder)
+    {
+        _isEmOpen = true;
+        _emStartIndex = textBuilder.Length;
+        _emOpenedInsideWord = char.IsLetterOrDigit(GetPrevChar(input, index));
+        _emSawWhitespace = false;
+    }
+
+    private void CloseEm(StringBuilder buffer, List<Node> nodes)
+    {
+        var emContent = buffer.ToString(_emStartIndex, buffer.Length - _emStartIndex);
+
+        if (_isStrongOpen && _strongStartIndex < _emStartIndex)
+        {
+            var strongBeforeEm = buffer.ToString(_strongStartIndex, _emStartIndex - _strongStartIndex);
+            buffer.Length = _strongStartIndex;
+            buffer.CommitText(nodes);
+            nodes.Add(new Node(strongBeforeEm, NodeType.Strong));
+            _strongStartIndex = buffer.Length;
+        }
+        else
+        {
+            buffer.Length = _emStartIndex;
+            buffer.CommitText(nodes);
+        }
+
+        nodes.Add(new Node(emContent, NodeType.Em));
+
+        _isEmOpen = false;
+        _emSawWhitespace = false;
+    }
+
+    private void ResetInlineMarkers()
+    {
+        _isStrongOpen = false;
+        _isEmOpen = false;
+        _strongOpenedInsideWord = false;
+        _emOpenedInsideWord = false;
+        _strongSawWhitespace = false;
+        _emSawWhitespace = false;
+        _strongStartIndex = 0;
+        _emStartIndex = 0;
+    }
+
+    private void MarkWhitespace()
+    {
+        if (_isStrongOpen) _strongSawWhitespace = true;
+        if (_isEmOpen) _emSawWhitespace = true;
+    }
+
+    private void FinalizeUnclosedMarkers(StringBuilder textBuilder)
+    {
+        if (!_isStrongOpen && !_isEmOpen)
+            return;
+
+        var inserts = new List<(int index, string text)>();
+
+        if (_isStrongOpen)
+            inserts.Add((_strongStartIndex, StrongMarker));
+
+        if (_isEmOpen)
+            inserts.Add((_emStartIndex, EmMarker));
+
+        textBuilder.InsertFromEnd(inserts);
+
+        ResetInlineMarkers();
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Markdown.Entities;
+using static Markdown.Inlines.InlineSyntax;
 
 namespace Markdown;
 
@@ -6,7 +7,6 @@ public class BlockSegmenter
 {
     private const string CarriageReturnParagraphSeparator = "\r\n\r\n";
     private const string ParagraphSeparator = "\n\n";
-    private const string CharpetHeadingPrefix = "# ";
 
     public IReadOnlyList<Block> Segment(string text)
     {
@@ -15,7 +15,7 @@ public class BlockSegmenter
 
         foreach (var paragraph in paragraphs)
         {
-            var blockType = paragraph.StartsWith(CharpetHeadingPrefix) ? BlockType.Heading : BlockType.Paragraph;
+            var blockType = paragraph.StartsWith(Sharp) ? BlockType.Heading : BlockType.Paragraph;
             var rawText = paragraph.TrimStart('#', ' ');
             var block = new Block(rawText, blockType);
             blocks.Add(block);

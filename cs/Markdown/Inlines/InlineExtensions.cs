@@ -1,5 +1,5 @@
-﻿using System.Text;
-using Markdown.Entities;
+﻿using Markdown.Entities;
+using System.Text;
 
 namespace Markdown.Inlines;
 
