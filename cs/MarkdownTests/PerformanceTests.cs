@@ -82,7 +82,7 @@ public class PerformanceTests
     }
 
     [Test]
-    public void Render_DeepNestedMarkup_DoesNotThrow()
+    public void Render_DeeplyNestedMarkup_DoesNotThrow()
     {
         var builder = new StringBuilder();
 
